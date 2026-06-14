@@ -1,0 +1,8 @@
+
+services:
+  diet-analysis:
+    build: .
+    image: diet-analysis
+    container_name: diet-analysis-container
+    volumes:
+      - ./output:/app/output
