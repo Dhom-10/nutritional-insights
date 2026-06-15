@@ -1,7 +1,8 @@
 import pandas as pd
 
-# Load the dataset
-df = pd.read_csv('All_Diets.csv')
+# Optimized read: load only needed columns to reduce memory and speed up processing
+needed_columns = ['Diet_type', 'Recipe_name', 'Cuisine_type', 'Protein(g)', 'Carbs(g)', 'Fat(g)']
+df = pd.read_csv('All_Diets.csv', usecols=needed_columns)
 
 # ---- Clean data: handle missing values ----
 # Fill any missing protein, carbs, or fat with the column average

@@ -1,14 +1,29 @@
-# Use a lightweight Python image
-FROM python:3.9-slim
+# ---------- Stage 1: Builder ----------
+# This stage installs dependencies into a separate layer
+FROM python:3.9-slim AS builder
 
-# Set the working directory inside the container
 WORKDIR /app
 
-# Copy everything from the current folder into the container
+# Copy only requirements first (better layer caching)
+COPY requirements.txt .
+
+# Install dependencies into a local folder
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# ---------- Stage 2: Final ----------
+# This stage only takes what it needs, keeping the image small
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Copy installed packages from the builder stage
+COPY --from=builder /root/.local /root/.local
+
+# Copy the application code and data
 COPY . /app
 
-# Install the required Python libraries
-RUN pip install -r requirements.txt
+# Make sure installed packages are on the PATH
+ENV PATH=/root/.local/bin:$PATH
 
-# Run the analysis script when the container starts 
+# Run the analysis script
 CMD ["python", "data_analysis.py"]
