@@ -9,18 +9,18 @@ Storage, and adds a browser dashboard that visualizes the results.
 ```
 Phase2_Cloud_Dashboard/
 ├── azure-function/
-│   ├── function_app.py           # HTTP-triggered Azure Function (Python v2 model)
+│   ├── function_app.py
 │   ├── requirements.txt
 │   ├── host.json
 │   ├── local.settings.json.example
-│   ├── upload_dataset_to_cloud.py  # uploads All_Diets.csv to real Azure Blob Storage
+│   ├── upload_dataset_to_cloud.py
 │   └── .gitignore
 ├── dashboard/
-│   ├── index.html                # single-file dashboard (Chart.js via CDN)
+│   ├── index.html
 │   └── staticwebapp.config.json
 └── docs/
-    ├── DEPLOYMENT_GUIDE.md       # step-by-step Azure deployment instructions
-    └── Phase2_Documentation.pdf  # architecture, workflow, and challenges write-up
+    ├── DEPLOYMENT_GUIDE.md
+    └── Phase2_Documentation.pdf
 ```
 
 ## Endpoints
