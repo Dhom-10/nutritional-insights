@@ -105,12 +105,21 @@ cd azure-function
 func azure functionapp publish diet-analysis-func
 ```
 
-Test the deployed endpoint:
+> **Note:** `requirements.txt` now includes `scikit-learn` (for the
+> `/api/clusters` endpoint). If you're redeploying an existing Function
+> App, use `--build remote` so the new dependency actually gets installed
+> in the cloud (see Troubleshooting below) — a cached local `.python_packages`
+> folder won't pick it up otherwise.
+
+Test the deployed endpoints:
 
 ```bash
 curl "https://diet-analysis-func.azurewebsites.net/api/insights"
 curl "https://diet-analysis-func.azurewebsites.net/api/insights?diet_type=keto"
 curl "https://diet-analysis-func.azurewebsites.net/api/diet_types"
+curl "https://diet-analysis-func.azurewebsites.net/api/correlations"
+curl "https://diet-analysis-func.azurewebsites.net/api/recipes?page=1&page_size=10"
+curl "https://diet-analysis-func.azurewebsites.net/api/clusters?k=4"
 ```
 
 ## 7. Point the dashboard at the live function
@@ -149,11 +158,17 @@ swa deploy dashboard --deployment-token <token-from-azure-portal>
 ## 9. Verify end to end
 
 1. Open the Static Web App URL from the Azure Portal.
-2. Confirm all three charts render (bar, doughnut, scatter) plus the top-5
-   protein table.
-3. Change the diet type filter and click **Refresh** — confirm the charts
-   update and "Function execution time" changes.
-4. Note the deployed URLs for the Phase 2 deliverables list:
+2. Confirm the bar, doughnut, and scatter charts render, plus the top-5
+   protein table and the nutrient correlation Heatmap (5 visualizations
+   total, auto-loaded).
+3. Change the diet type filter and click **Refresh** / **Get Nutritional
+   Insights** — confirm the charts and heatmap update and "Function
+   execution time" changes.
+4. Click **Get Recipes** — confirm a paginated recipe table appears and
+   Previous/Next page through the full dataset.
+5. Click **Get Clusters** — confirm a K-Means scatter plot and cluster
+   summary table appear; try changing "k" and clicking Recompute.
+6. Note the deployed URLs for the Phase 2 deliverables list:
    - Azure Function URL
    - Static Web App URL
    - GitHub repo link
@@ -167,3 +182,5 @@ swa deploy dashboard --deployment-token <token-from-azure-portal>
 | `ModuleNotFoundError: azure.storage.blob` on deploy | `requirements.txt` didn't get picked up — redeploy with `func azure functionapp publish diet-analysis-func --build remote` |
 | 500 error with "Internal error: ..." | Usually a missing/incorrect `AZURE_STORAGE_CONNECTION_STRING` app setting — re-run step 4 |
 | Empty charts, no error | Check `BLOB_CONTAINER_NAME` / `BLOB_NAME` app settings match what you uploaded in step 2 |
+| `ModuleNotFoundError: sklearn` on `/api/clusters` | Same cause as the `azure.storage.blob` case above — redeploy with `--build remote` so `scikit-learn` gets installed |
+| `/api/clusters` slow on first request | Normal cold-start cost of loading scikit-learn on the Consumption plan; subsequent requests are fast |

@@ -5,106 +5,272 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Nutritional Insights Dashboard — Phase 2</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f1420;
-    --card: #1a2233;
-    --accent: #4fd1c5;
-    --accent2: #f6ad55;
-    --text: #e6ebf5;
-    --muted: #8892a6;
-    --border: #2a3448;
+    --bg: #fffdf6;
+    --bg-accent: #f6f1e0;
+    --card: #4f5e2c;
+    --card2: #5c6d34;
+    --card-border: #3c4820;
+    --accent: #e0a93a;
+    --accent-dark: #c5921f;
+    --accent2: #d97b3f;
+    --accent3: #c25b4d;
+    --text-on-card: #ffffff;
+    --muted-on-card: #dfe4cb;
+    --ink: #2f3a1c;
+    --ink-muted: #6b7a4a;
+    --border: #ece6d4;
+    --radius: 18px;
+    --shadow: 0 10px 30px -12px rgba(63, 74, 32, 0.28), 0 2px 6px rgba(63, 74, 32, 0.08);
+    --shadow-sm: 0 4px 14px -6px rgba(63, 74, 32, 0.22);
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    padding: 24px;
+    font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background:
+      radial-gradient(1100px 500px at 12% -10%, var(--bg-accent) 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, #f2ecd8 0%, transparent 55%),
+      var(--bg);
+    color: var(--ink);
+    padding: 36px;
+    min-height: 100vh;
   }
-  header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
-  h1 { font-size: 22px; margin: 0; }
-  .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .wrap { max-width: 1280px; margin: 0 auto; }
 
-  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header {
+    position: relative; overflow: hidden;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 18px;
+    margin-bottom: 26px;
+    background: linear-gradient(135deg, var(--card2) 0%, var(--card) 55%, #3f4b24 100%);
+    border: 1px solid var(--card-border); border-radius: var(--radius);
+    padding: 26px 30px; box-shadow: var(--shadow);
+  }
+  header::after {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(420px 180px at 92% -20%, rgba(224,169,58,0.35), transparent 70%);
+    pointer-events: none;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; position: relative; z-index: 1; }
+  .brand-badge {
+    width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 12px rgba(224,169,58,0.45);
+  }
+  .brand-badge svg { width: 24px; height: 24px; }
+  h1 { font-size: 23px; margin: 0; font-weight: 800; color: var(--text-on-card); letter-spacing: -0.01em; }
+  .subtitle { color: var(--muted-on-card); font-size: 13px; margin-top: 3px; }
+
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: relative; z-index: 1; }
   select, button {
-    background: var(--card);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 14px;
-    font-size: 14px;
+    background: rgba(255,255,255,0.95);
+    color: var(--ink);
+    border: 1px solid rgba(255,255,255,0.5);
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 13.5px;
+    font-family: inherit;
+    font-weight: 500;
     cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
-  button.primary { background: var(--accent); color: #0f1420; font-weight: 600; border: none; }
-  button.primary:hover { opacity: 0.9; }
-  button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-  .meta-bar {
-    display: flex; gap: 24px; flex-wrap: wrap;
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-    padding: 12px 18px; margin-bottom: 24px; font-size: 13px; color: var(--muted);
+  select:hover { transform: translateY(-1px); }
+  button.primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+    color: #3a2708; font-weight: 700; border: none;
+    box-shadow: 0 4px 12px rgba(224,169,58,0.5);
+    display: inline-flex; align-items: center; gap: 8px;
   }
-  .meta-bar b { color: var(--text); }
+  button.primary svg { width: 15px; height: 15px; }
+  button.primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(224,169,58,0.6); }
+  button.primary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px; }
+  .status { font-size: 13px; padding: 12px 16px; border-radius: 12px; margin-bottom: 18px; display: none; font-weight: 500; }
+  .status.error { display: block; background: #fdf0ee; color: #a83c2e; border: 1px solid #f0c3ba; }
+  .status.loading { display: block; background: #fdf6e8; color: #96701c; border: 1px solid #ecdba8; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 26px; }
+  .kpi {
+    background: #ffffff; border: 1px solid var(--border); border-radius: 16px;
+    padding: 18px 20px; box-shadow: var(--shadow-sm);
+    display: flex; flex-direction: column; gap: 6px;
+    border-top: 3px solid var(--accent);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .kpi:nth-child(2) { border-top-color: var(--accent2); }
+  .kpi:nth-child(3) { border-top-color: var(--accent3); }
+  .kpi:nth-child(4) { border-top-color: #7c9a5a; }
+  .kpi:nth-child(5) { border-top-color: #8a7bc9; }
+  .kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+  .kpi-label { font-size: 11.5px; color: var(--ink-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi-value { font-size: 22px; font-weight: 700; color: var(--ink); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 22px; }
   .card {
-    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-    padding: 18px; height: 420px; display: flex; flex-direction: column;
+    position: relative;
+    background: linear-gradient(160deg, var(--card2) 0%, var(--card) 100%);
+    border: 1px solid var(--card-border); border-radius: var(--radius);
+    padding: 22px; height: 430px; display: flex; flex-direction: column;
+    box-shadow: var(--shadow);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
-  .card h2 { font-size: 15px; margin: 0 0 12px 0; color: var(--text); flex-shrink: 0; }
+  .card:hover { transform: translateY(-4px); box-shadow: 0 16px 36px -14px rgba(63,74,32,0.35); }
+  .card h2 {
+    font-size: 14.5px; margin: 0 0 16px 0; color: var(--text-on-card); font-weight: 600; flex-shrink: 0;
+    display: flex; align-items: center; gap: 8px; letter-spacing: 0.01em;
+  }
+  .card h2::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 4px rgba(224,169,58,0.25); flex-shrink: 0;
+  }
   .card canvas { flex: 1; min-height: 0; max-height: 100%; }
 
-  .status { font-size: 13px; padding: 8px 12px; border-radius: 8px; margin-bottom: 16px; display: none; }
-  .status.error { display: block; background: #3a1d1d; color: #ff8a8a; border: 1px solid #5a2a2a; }
-  .status.loading { display: block; background: #1d2f3a; color: #7ec8ff; border: 1px solid #2a4a5a; }
+  .table-card { overflow: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; color: var(--text-on-card); }
+  th, td { text-align: left; padding: 10px 10px; }
+  thead th {
+    color: var(--muted-on-card); font-weight: 600; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.04em; border-bottom: 1px solid rgba(255,255,255,0.25);
+  }
+  tbody td { border-bottom: 1px solid rgba(255,255,255,0.1); }
+  tbody tr:hover { background: rgba(255,255,255,0.08); }
+  tbody tr:last-child td { border-bottom: none; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 500; }
+  .card.light {
+    background: #ffffff; border: 1px solid var(--border);
+  }
+  .card.light h2 { color: var(--ink); }
+  .card.light h2::before { background: var(--accent2); box-shadow: 0 0 0 4px rgba(217,123,63,0.2); }
+
+  .actions-section, .panel-section {
+    background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px 24px; box-shadow: var(--shadow-sm); margin-bottom: 22px;
+  }
+  .actions-section h2, .panel-section h2 { font-size: 15px; margin: 0 0 14px 0; color: var(--ink); font-weight: 700; }
+  .actions-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  button.secondary {
+    background: #fff; color: var(--ink); border: 1.5px solid var(--card2);
+    font-weight: 600;
+  }
+  button.secondary:hover { background: var(--bg-accent); transform: translateY(-1px); }
+  button.secondary.active { background: var(--card2); color: #fff; }
+
+  .hidden { display: none !important; }
+
+  .heatmap-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+  .heatmap-row { display: grid; grid-template-columns: 70px repeat(3, 1fr); gap: 4px; align-items: center; }
+  .heatmap-row-label { font-size: 11px; font-weight: 600; color: var(--ink-muted); text-align: right; padding-right: 6px; }
+  .heatmap-col-labels { display: grid; grid-template-columns: 70px repeat(3, 1fr); gap: 4px; margin-bottom: 2px; }
+  .heatmap-col-labels span { font-size: 11px; font-weight: 600; color: var(--ink-muted); text-align: center; }
+  .heatmap-cell {
+    border-radius: 8px; padding: 12px 4px; text-align: center; font-size: 12.5px; font-weight: 700;
+    color: var(--ink); transition: transform 0.15s ease;
+  }
+  .heatmap-cell:hover { transform: scale(1.05); }
+
+  .pagination { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+  .pagination button { padding: 8px 14px; font-size: 12.5px; }
+  .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .pagination span { font-size: 13px; color: var(--ink-muted); font-weight: 500; }
+
+  .cluster-layout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; align-items: start; }
+  .cluster-layout canvas { width: 100%; height: 340px; }
+  .cluster-summary-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .cluster-summary-table th, .cluster-summary-table td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); color: var(--ink); }
+  .cluster-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  .k-select { padding: 8px 12px; font-size: 12.5px; }
+
+  @media (max-width: 720px) {
+    .cluster-layout { grid-template-columns: 1fr; }
+  }
+
+  footer { text-align: center; color: var(--ink-muted); font-size: 12px; margin-top: 28px; padding-bottom: 8px; }
 </style>
 </head>
 <body>
+<div class="wrap">
 
 <header>
-  <div>
-    <h1>Nutritional Insights Dashboard</h1>
-    <div class="subtitle">Phase 2 — Cloud Dashboard Development (Azure Function → Blob Storage → Dashboard)</div>
+  <div class="brand">
+    <div class="brand-badge">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 3C8 3 5 6.5 5 11c0 4 2.5 7 5 9 2.5-2 7-5 7-9 0-4.5-3-8-5-8z" stroke="#3a2708" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M12 8v6M9 11h6" stroke="#3a2708" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Nutritional Insights Dashboard</h1>
+      <div class="subtitle">Phase 2 — Cloud Dashboard Development · Azure Function → Blob Storage → Dashboard</div>
+    </div>
   </div>
   <div class="controls">
     <select id="dietFilter">
       <option value="">All diet types</option>
     </select>
-    <button class="primary" id="refreshBtn">Refresh</button>
+    <button class="primary" id="refreshBtn">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 4v5h5M20 20v-5h-5" stroke="#3a2708" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M5.5 9a7 7 0 0113-2.5M18.5 15a7 7 0 01-13 2.5" stroke="#3a2708" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Refresh
+    </button>
   </div>
 </header>
 
 <div id="status" class="status"></div>
 
-<div class="meta-bar">
-  <div>Function execution time: <b id="execTime">—</b></div>
-  <div>Rows analyzed: <b id="rowCount">—</b></div>
-  <div>Filter applied: <b id="filterApplied">—</b></div>
-  <div>Highest-protein diet: <b id="highestProtein">—</b></div>
-  <div>Last refreshed: <b id="lastRefreshed">—</b></div>
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-label">Execution time</div>
+    <div class="kpi-value" id="execTime">—</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Rows analyzed</div>
+    <div class="kpi-value" id="rowCount">—</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Filter applied</div>
+    <div class="kpi-value" id="filterApplied">—</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Highest-protein diet</div>
+    <div class="kpi-value" id="highestProtein">—</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Last refreshed</div>
+    <div class="kpi-value" id="lastRefreshed">—</div>
+  </div>
+</div>
+
+<div class="actions-section">
+  <h2>API Data Interaction</h2>
+  <div class="actions-row">
+    <button class="secondary active" id="getInsightsBtn">Get Nutritional Insights</button>
+    <button class="secondary" id="getRecipesBtn">Get Recipes</button>
+    <button class="secondary" id="getClustersBtn">Get Clusters</button>
+  </div>
 </div>
 
 <div class="grid">
   <div class="card">
-    <h2>Average Macronutrients by Diet Type (bar)</h2>
+    <h2>Average Macronutrients by Diet Type</h2>
     <canvas id="barChart"></canvas>
   </div>
   <div class="card">
-    <h2>Most Common Cuisine per Diet Type (doughnut)</h2>
+    <h2>Most Common Cuisine per Diet Type</h2>
     <canvas id="pieChart"></canvas>
   </div>
   <div class="card">
-    <h2>Top Protein-Rich Recipes (scatter)</h2>
+    <h2>Top Protein-Rich Recipes</h2>
     <canvas id="scatterChart"></canvas>
   </div>
-  <div class="card">
-    <h2>Top 5 Protein Recipes (table)</h2>
+  <div class="card table-card">
+    <h2>Top 5 Protein Recipes</h2>
     <div style="overflow:auto;">
       <table id="recipeTable">
         <thead><tr><th>Diet</th><th>Recipe</th><th>Cuisine</th><th>Protein (g)</th></tr></thead>
@@ -112,6 +278,53 @@
       </table>
     </div>
   </div>
+  <div class="card light">
+    <h2>Nutrient Correlation Heatmap</h2>
+    <div class="heatmap-wrap" id="heatmapWrap">
+      <p style="font-size:12.5px; color:var(--ink-muted); margin:0;">Loading…</p>
+    </div>
+  </div>
+</div>
+
+<section class="panel-section hidden" id="recipesSection">
+  <h2>Recipes (paginated)</h2>
+  <div style="overflow:auto;">
+    <table>
+      <thead><tr><th>Diet</th><th>Recipe</th><th>Cuisine</th><th>Protein (g)</th><th>Carbs (g)</th><th>Fat (g)</th></tr></thead>
+      <tbody id="recipesPageBody" style="color: var(--ink);"></tbody>
+    </table>
+  </div>
+  <div class="pagination">
+    <button class="secondary" id="prevPageBtn">Previous</button>
+    <span id="pageIndicator">Page 1 of 1</span>
+    <button class="secondary" id="nextPageBtn">Next</button>
+  </div>
+</section>
+
+<section class="panel-section hidden" id="clustersSection">
+  <h2>Recipe Clusters (K-Means on Protein/Carbs/Fat)</h2>
+  <div class="actions-row" style="margin-bottom:14px;">
+    <label style="font-size:12.5px; color:var(--ink-muted); align-self:center;">Clusters (k):</label>
+    <select id="kSelect" class="k-select">
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4" selected>4</option>
+      <option value="5">5</option>
+      <option value="6">6</option>
+    </select>
+    <button class="secondary" id="recomputeClustersBtn">Recompute</button>
+  </div>
+  <div class="cluster-layout">
+    <canvas id="clusterChart"></canvas>
+    <table class="cluster-summary-table">
+      <thead><tr><th>Cluster</th><th>Count</th><th>Avg Protein</th><th>Avg Carbs</th><th>Avg Fat</th></tr></thead>
+      <tbody id="clusterSummaryBody"></tbody>
+    </table>
+  </div>
+</section>
+
+<footer>Nutritional Insights · CPSY 300 Phase 2</footer>
+
 </div>
 
 <script>
@@ -123,9 +336,28 @@
   const statusEl = document.getElementById("status");
   const dietFilterEl = document.getElementById("dietFilter");
   const refreshBtn = document.getElementById("refreshBtn");
+  const getInsightsBtn = document.getElementById("getInsightsBtn");
+  const getRecipesBtn = document.getElementById("getRecipesBtn");
+  const getClustersBtn = document.getElementById("getClustersBtn");
+  const recipesSection = document.getElementById("recipesSection");
+  const clustersSection = document.getElementById("clustersSection");
+  const recipesPageBody = document.getElementById("recipesPageBody");
+  const prevPageBtn = document.getElementById("prevPageBtn");
+  const nextPageBtn = document.getElementById("nextPageBtn");
+  const pageIndicator = document.getElementById("pageIndicator");
+  const kSelect = document.getElementById("kSelect");
+  const recomputeClustersBtn = document.getElementById("recomputeClustersBtn");
+  const heatmapWrap = document.getElementById("heatmapWrap");
+  const clusterSummaryBody = document.getElementById("clusterSummaryBody");
 
-  let barChart, pieChart, scatterChart;
-  const CHART_COLORS = ["#4fd1c5", "#f6ad55", "#fc8181", "#63b3ed", "#b794f4", "#68d391", "#f6e05e"];
+  let barChart, pieChart, scatterChart, clusterChart;
+  let recipesLoaded = false, clustersLoaded = false;
+  let currentPage = 1;
+  const PAGE_SIZE = 10;
+  const CHART_COLORS = ["#f6c453", "#e8874a", "#e37b7b", "#f2e2a8", "#c9a86a", "#8fbf9f", "#dfe6c4"];
+  const AXIS_COLOR = "#eef1e2";
+  const LEGEND_COLOR = "#ffffff";
+  const GRID_COLOR = "rgba(255,255,255,0.15)";
 
   function setStatus(message, type) {
     statusEl.className = "status" + (type ? " " + type : "");
@@ -146,25 +378,153 @@
 
   async function loadInsights() {
     refreshBtn.disabled = true;
+    getInsightsBtn.disabled = true;
     setStatus("Loading data from Azure Function…", "loading");
 
     const diet = dietFilterEl.value;
-    const url = diet
+    const insightsUrl = diet
       ? `${API_BASE_URL}/insights?diet_type=${encodeURIComponent(diet)}`
       : `${API_BASE_URL}/insights`;
+    const correlationsUrl = diet
+      ? `${API_BASE_URL}/correlations?diet_type=${encodeURIComponent(diet)}`
+      : `${API_BASE_URL}/correlations`;
 
     try {
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-
+      const [insightsRes, correlationsRes] = await Promise.all([fetch(insightsUrl), fetch(correlationsUrl)]);
+      const data = await insightsRes.json();
+      if (!insightsRes.ok) throw new Error(data.error || `HTTP ${insightsRes.status}`);
       renderAll(data);
+
+      const corrData = await correlationsRes.json();
+      if (correlationsRes.ok) renderHeatmap(corrData);
+
       setStatus("", "");
     } catch (err) {
       setStatus(`Failed to load data: ${err.message}. Is the Azure Function running / API_BASE_URL correct?`, "error");
     } finally {
       refreshBtn.disabled = false;
+      getInsightsBtn.disabled = false;
     }
+
+    // Keep the on-demand panels in sync with the current filter, if open.
+    if (recipesLoaded) loadRecipes(1);
+    if (clustersLoaded) loadClusters();
+  }
+
+  function lerpColor(a, b, t) {
+    const c1 = a.match(/\w\w/g).map(x => parseInt(x, 16));
+    const c2 = b.match(/\w\w/g).map(x => parseInt(x, 16));
+    const c = c1.map((v, i) => Math.round(v + (c2[i] - v) * t));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+  }
+
+  function heatmapColor(value) {
+    const t = Math.min(Math.abs(value), 1);
+    return value >= 0 ? lerpColor("ffffff", "e0a93a", t) : lerpColor("ffffff", "c25b4d", t);
+  }
+
+  function renderHeatmap(corrData) {
+    const labels = corrData.labels.map(l => l.replace("(g)", ""));
+    const matrix = corrData.matrix;
+    const cellFor = (x, y) => matrix.find(m => m.x === corrData.labels[x] && m.y === corrData.labels[y]).value;
+
+    let html = '<div class="heatmap-col-labels"><span></span>' +
+      labels.map(l => `<span>${l}</span>`).join("") + "</div>";
+
+    labels.forEach((rowLabel, y) => {
+      html += `<div class="heatmap-row"><div class="heatmap-row-label">${rowLabel}</div>`;
+      labels.forEach((_, x) => {
+        const value = cellFor(x, y);
+        html += `<div class="heatmap-cell" style="background:${heatmapColor(value)}">${value.toFixed(2)}</div>`;
+      });
+      html += "</div>";
+    });
+
+    heatmapWrap.innerHTML = html;
+  }
+
+  async function loadRecipes(page) {
+    recipesLoaded = true;
+    recipesSection.classList.remove("hidden");
+    currentPage = page;
+    const diet = dietFilterEl.value;
+    const params = new URLSearchParams({ page, page_size: PAGE_SIZE });
+    if (diet) params.set("diet_type", diet);
+
+    prevPageBtn.disabled = true;
+    nextPageBtn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE_URL}/recipes?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+      recipesPageBody.innerHTML = data.recipes
+        .map(r => `<tr><td>${r.Diet_type}</td><td>${r.Recipe_name}</td><td>${r.Cuisine_type}</td><td>${r["Protein(g)"]}</td><td>${r["Carbs(g)"]}</td><td>${r["Fat(g)"]}</td></tr>`)
+        .join("");
+      pageIndicator.textContent = `Page ${data.page} of ${data.total_pages} (${data.total_rows} recipes)`;
+      currentPage = data.page;
+      prevPageBtn.disabled = data.page <= 1;
+      nextPageBtn.disabled = data.page >= data.total_pages;
+    } catch (err) {
+      recipesPageBody.innerHTML = `<tr><td colspan="6">Failed to load recipes: ${err.message}</td></tr>`;
+    }
+  }
+
+  async function loadClusters() {
+    clustersLoaded = true;
+    clustersSection.classList.remove("hidden");
+    const diet = dietFilterEl.value;
+    const k = kSelect.value;
+    const params = new URLSearchParams({ k });
+    if (diet) params.set("diet_type", diet);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/clusters?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      renderClusterChart(data.sample_points);
+      renderClusterSummary(data.cluster_centers);
+    } catch (err) {
+      clusterSummaryBody.innerHTML = `<tr><td colspan="5">Failed to load clusters: ${err.message}</td></tr>`;
+    }
+  }
+
+  function renderClusterChart(points) {
+    const clusterIds = [...new Set(points.map(p => p.cluster))].sort((a, b) => a - b);
+    const datasets = clusterIds.map((id, i) => ({
+      label: `Cluster ${id}`,
+      data: points.filter(p => p.cluster === id).map(p => ({ x: p["Protein(g)"], y: p["Carbs(g)"] })),
+      backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+      pointRadius: 4,
+      pointHoverRadius: 6,
+    }));
+
+    const ctx = document.getElementById("clusterChart");
+    if (clusterChart) clusterChart.destroy();
+    clusterChart = new Chart(ctx, {
+      type: "scatter",
+      data: { datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { title: { display: true, text: "Protein (g)", color: "#6b7a4a" }, ticks: { color: "#6b7a4a" }, grid: { color: "#ece6d4" } },
+          y: { title: { display: true, text: "Carbs (g)", color: "#6b7a4a" }, ticks: { color: "#6b7a4a" }, grid: { color: "#ece6d4" } },
+        },
+        plugins: { legend: { labels: { color: "#2f3a1c", boxWidth: 12, font: { size: 10 } } } },
+      },
+    });
+  }
+
+  function renderClusterSummary(centers) {
+    clusterSummaryBody.innerHTML = centers
+      .map((c, i) => `<tr>
+        <td><span class="cluster-swatch" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>Cluster ${c.cluster}</td>
+        <td>${c.count}</td>
+        <td>${c["avg_Protein(g)"]}</td>
+        <td>${c["avg_Carbs(g)"]}</td>
+        <td>${c["avg_Fat(g)"]}</td>
+      </tr>`)
+      .join("");
   }
 
   function renderAll(data) {
@@ -189,15 +549,18 @@
       data: {
         labels,
         datasets: [
-          { label: "Protein (g)", data: avgMacros.map(r => r["Protein(g)"]), backgroundColor: CHART_COLORS[0] },
-          { label: "Carbs (g)", data: avgMacros.map(r => r["Carbs(g)"]), backgroundColor: CHART_COLORS[1] },
-          { label: "Fat (g)", data: avgMacros.map(r => r["Fat(g)"]), backgroundColor: CHART_COLORS[2] },
+          { label: "Protein (g)", data: avgMacros.map(r => r["Protein(g)"]), backgroundColor: CHART_COLORS[0], borderRadius: 6 },
+          { label: "Carbs (g)", data: avgMacros.map(r => r["Carbs(g)"]), backgroundColor: CHART_COLORS[1], borderRadius: 6 },
+          { label: "Fat (g)", data: avgMacros.map(r => r["Fat(g)"]), backgroundColor: CHART_COLORS[2], borderRadius: 6 },
         ],
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        scales: { x: { ticks: { color: "#8892a6" } }, y: { ticks: { color: "#8892a6" } } },
-        plugins: { legend: { labels: { color: "#e6ebf5" } } },
+        scales: {
+          x: { ticks: { color: AXIS_COLOR }, grid: { color: GRID_COLOR } },
+          y: { ticks: { color: AXIS_COLOR }, grid: { color: GRID_COLOR } },
+        },
+        plugins: { legend: { labels: { color: LEGEND_COLOR } } },
       },
     });
   }
@@ -210,11 +573,12 @@
       type: "doughnut",
       data: {
         labels,
-        datasets: [{ data: commonCuisine.map(() => 1), backgroundColor: CHART_COLORS }],
+        datasets: [{ data: commonCuisine.map(() => 1), backgroundColor: CHART_COLORS, borderColor: "rgba(255,255,255,0.15)", borderWidth: 2 }],
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: "bottom", labels: { color: "#e6ebf5", boxWidth: 12, font: { size: 10 } } } },
+        cutout: "62%",
+        plugins: { legend: { position: "bottom", labels: { color: LEGEND_COLOR, boxWidth: 12, font: { size: 10 } } } },
       },
     });
   }
@@ -227,6 +591,8 @@
         .filter(r => r.Diet_type === diet)
         .map(r => ({ x: r.Cuisine_type, y: r["Protein(g)"] })),
       backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+      pointRadius: 6,
+      pointHoverRadius: 8,
     }));
 
     const ctx = document.getElementById("scatterChart");
@@ -237,10 +603,10 @@
       options: {
         responsive: true, maintainAspectRatio: false,
         scales: {
-          x: { type: "category", labels: [...new Set(topProtein.map(r => r.Cuisine_type))], ticks: { color: "#8892a6" } },
-          y: { title: { display: true, text: "Protein (g)", color: "#8892a6" }, ticks: { color: "#8892a6" } },
+          x: { type: "category", labels: [...new Set(topProtein.map(r => r.Cuisine_type))], ticks: { color: AXIS_COLOR }, grid: { color: GRID_COLOR } },
+          y: { title: { display: true, text: "Protein (g)", color: AXIS_COLOR }, ticks: { color: AXIS_COLOR }, grid: { color: GRID_COLOR } },
         },
-        plugins: { legend: { labels: { color: "#e6ebf5", boxWidth: 12, font: { size: 10 } } } },
+        plugins: { legend: { labels: { color: LEGEND_COLOR, boxWidth: 12, font: { size: 10 } } } },
       },
     });
   }
@@ -254,7 +620,15 @@
   }
 
   refreshBtn.addEventListener("click", loadInsights);
+  getInsightsBtn.addEventListener("click", loadInsights);
   dietFilterEl.addEventListener("change", loadInsights);
+
+  getRecipesBtn.addEventListener("click", () => loadRecipes(1));
+  prevPageBtn.addEventListener("click", () => loadRecipes(currentPage - 1));
+  nextPageBtn.addEventListener("click", () => loadRecipes(currentPage + 1));
+
+  getClustersBtn.addEventListener("click", loadClusters);
+  recomputeClustersBtn.addEventListener("click", loadClusters);
 
   loadDietTypes().then(loadInsights);
 </script>

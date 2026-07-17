@@ -30,6 +30,12 @@ Phase2_Cloud_Dashboard/
 - `GET /api/insights?diet_type=keto` — same, filtered to one diet type
 - `GET /api/diet_types` — distinct diet types, used to populate the
   dashboard's filter dropdown
+- `GET /api/correlations` (`?diet_type=keto`) — Protein/Carbs/Fat
+  correlation matrix, powers the dashboard's nutrient correlation Heatmap
+- `GET /api/recipes` (`?diet_type=keto&page=2&page_size=10`) — paginated
+  individual recipe rows, powers the "Get Recipes" button + pagination UI
+- `GET /api/clusters` (`?diet_type=keto&k=4`) — K-Means clustering of
+  recipes by macronutrient profile, powers the "Get Clusters" button
 
 ## Quick start
 
@@ -38,6 +44,11 @@ Phase2_Cloud_Dashboard/
 2. `pip install -r requirements.txt && func start`
 3. Open `dashboard/index.html` in a browser (it defaults to
    `http://localhost:7071/api`)
+
+Alternatively, for local testing without Azure Functions Core Tools at
+all, run `python mockapi/server.py path/to/All_Diets.csv` — it serves the
+same routes on `http://localhost:7071/api/...` using the exact analysis
+functions from `azure-function/function_app.py`.
 
 For full cloud deployment (Function App, Blob Storage, Static Web App),
 see `docs/DEPLOYMENT_GUIDE.md`.

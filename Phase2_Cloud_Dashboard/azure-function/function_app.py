@@ -18,12 +18,15 @@ or in local.settings.json for local testing):
 import io
 import json
 import logging
+import math
 import os
 import time
 
 import azure.functions as func
 import pandas as pd
 from azure.storage.blob import BlobServiceClient
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -54,11 +57,17 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _analyze(df: pd.DataFrame, diet_filter: str | None = None) -> dict:
+def _apply_diet_filter(df: pd.DataFrame, diet_filter: str | None = None) -> pd.DataFrame:
+    """Shared helper: filters the dataset to a single diet type, or returns it unchanged."""
     if diet_filter:
         df = df[df["Diet_type"].str.lower() == diet_filter.lower()]
         if df.empty:
             raise ValueError(f"No rows found for diet_type='{diet_filter}'")
+    return df
+
+
+def _analyze(df: pd.DataFrame, diet_filter: str | None = None) -> dict:
+    df = _apply_diet_filter(df, diet_filter)
 
     # 1. Average macronutrients per diet type (bar chart source)
     avg_macros = df.groupby("Diet_type")[NUMERIC_COLUMNS].mean().round(2)
@@ -82,6 +91,93 @@ def _analyze(df: pd.DataFrame, diet_filter: str | None = None) -> dict:
         "top_protein_recipes": top_protein.to_dict(orient="records"),
         "highest_protein_diet": highest_protein_diet,
         "common_cuisine_per_diet": common_cuisine.reset_index().to_dict(orient="records"),
+    }
+
+
+def _correlations(df: pd.DataFrame, diet_filter: str | None = None) -> dict:
+    """
+    Pearson correlation matrix between the numeric macronutrient columns.
+    Powers the dashboard's nutrient-correlation Heatmap card.
+    """
+    df = _apply_diet_filter(df, diet_filter)
+
+    corr = df[NUMERIC_COLUMNS].corr().round(3)
+    matrix = [
+        {"x": x_col, "y": y_col, "value": float(corr.loc[y_col, x_col])}
+        for y_col in NUMERIC_COLUMNS
+        for x_col in NUMERIC_COLUMNS
+    ]
+
+    return {
+        "row_count": int(len(df)),
+        "labels": NUMERIC_COLUMNS,
+        "matrix": matrix,
+    }
+
+
+def _paginate_recipes(df: pd.DataFrame, diet_filter: str | None, page: int, page_size: int) -> dict:
+    """
+    Returns one page of individual recipe rows. Powers the "Get Recipes"
+    button and the Pagination controls on the dashboard.
+    """
+    df = _apply_diet_filter(df, diet_filter)
+
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 100)
+    total_rows = int(len(df))
+    total_pages = max(math.ceil(total_rows / page_size), 1)
+    page = min(page, total_pages)
+
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_df = df.iloc[start:end][["Diet_type", "Recipe_name", "Cuisine_type"] + NUMERIC_COLUMNS]
+
+    return {
+        "page": page,
+        "page_size": page_size,
+        "total_rows": total_rows,
+        "total_pages": total_pages,
+        "recipes": page_df.to_dict(orient="records"),
+    }
+
+
+def _cluster(df: pd.DataFrame, diet_filter: str | None, k: int, sample_size: int = 300) -> dict:
+    """
+    K-Means clustering of recipes by macronutrient profile (Protein/Carbs/Fat).
+    Powers the "Get Clusters" button - groups recipes with similar nutrition
+    into k clusters, independent of their labeled Diet_type.
+    """
+    df = _apply_diet_filter(df, diet_filter)
+
+    k = min(max(k, 2), 8)
+    k = min(k, len(df))  # can't have more clusters than rows
+
+    features = df[NUMERIC_COLUMNS].to_numpy()
+    scaled = StandardScaler().fit_transform(features)
+
+    model = KMeans(n_clusters=k, n_init=10, random_state=42)
+    labels = model.fit_predict(scaled)
+
+    clustered = df[["Recipe_name", "Diet_type", "Cuisine_type"] + NUMERIC_COLUMNS].copy()
+    clustered["cluster"] = labels
+
+    centers = (
+        clustered.groupby("cluster")[NUMERIC_COLUMNS]
+        .mean()
+        .round(2)
+        .reset_index()
+        .rename(columns={c: f"avg_{c}" for c in NUMERIC_COLUMNS})
+    )
+    counts = clustered.groupby("cluster").size().rename("count")
+    centers = centers.merge(counts, on="cluster")
+
+    sample = clustered.sample(n=min(sample_size, len(clustered)), random_state=42)
+
+    return {
+        "k": k,
+        "row_count": int(len(df)),
+        "cluster_centers": centers.to_dict(orient="records"),
+        "sample_points": sample.to_dict(orient="records"),
     }
 
 
@@ -151,3 +247,100 @@ def get_diet_types(req: func.HttpRequest) -> func.HttpResponse:
         mimetype="application/json",
         headers={"Access-Control-Allow-Origin": "*"},
     )
+
+
+def _json_response(payload: dict, status_code: int = 200) -> func.HttpResponse:
+    return func.HttpResponse(
+        json.dumps(payload, indent=2, default=str),
+        status_code=status_code,
+        mimetype="application/json",
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
+@app.route(route="correlations", methods=["GET"])
+def get_correlations(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    GET /api/correlations
+    GET /api/correlations?diet_type=keto
+
+    Returns a Protein/Carbs/Fat correlation matrix, used to render the
+    dashboard's nutrient-correlation Heatmap.
+    """
+    start = time.perf_counter()
+    diet_filter = req.params.get("diet_type")
+
+    try:
+        df = _clean(_load_dataset_from_blob())
+        result = _correlations(df, diet_filter)
+    except ValueError as ve:
+        return _json_response({"error": str(ve)}, 404)
+    except Exception as e:
+        logging.exception("Failed to compute correlations")
+        return _json_response({"error": f"Internal error: {e}"}, 500)
+
+    result["execution_time_ms"] = round((time.perf_counter() - start) * 1000, 2)
+    result["diet_filter_applied"] = diet_filter or "all"
+    return _json_response(result)
+
+
+@app.route(route="recipes", methods=["GET"])
+def get_recipes(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    GET /api/recipes
+    GET /api/recipes?diet_type=keto&page=2&page_size=10
+
+    Returns one page of individual recipe rows for the "Get Recipes"
+    button + pagination controls on the dashboard.
+    """
+    start = time.perf_counter()
+    diet_filter = req.params.get("diet_type")
+    try:
+        page = int(req.params.get("page", 1))
+        page_size = int(req.params.get("page_size", 10))
+    except ValueError:
+        return _json_response({"error": "page and page_size must be integers"}, 400)
+
+    try:
+        df = _clean(_load_dataset_from_blob())
+        result = _paginate_recipes(df, diet_filter, page, page_size)
+    except ValueError as ve:
+        return _json_response({"error": str(ve)}, 404)
+    except Exception as e:
+        logging.exception("Failed to fetch recipes")
+        return _json_response({"error": f"Internal error: {e}"}, 500)
+
+    result["execution_time_ms"] = round((time.perf_counter() - start) * 1000, 2)
+    result["diet_filter_applied"] = diet_filter or "all"
+    return _json_response(result)
+
+
+@app.route(route="clusters", methods=["GET"])
+def get_clusters(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    GET /api/clusters
+    GET /api/clusters?diet_type=keto&k=4
+
+    Runs K-Means on the macronutrient profile (Protein/Carbs/Fat) of each
+    recipe and returns cluster centers + a sample of labeled points, for
+    the "Get Clusters" button on the dashboard.
+    """
+    start = time.perf_counter()
+    diet_filter = req.params.get("diet_type")
+    try:
+        k = int(req.params.get("k", 4))
+    except ValueError:
+        return _json_response({"error": "k must be an integer"}, 400)
+
+    try:
+        df = _clean(_load_dataset_from_blob())
+        result = _cluster(df, diet_filter, k)
+    except ValueError as ve:
+        return _json_response({"error": str(ve)}, 404)
+    except Exception as e:
+        logging.exception("Failed to compute clusters")
+        return _json_response({"error": f"Internal error: {e}"}, 500)
+
+    result["execution_time_ms"] = round((time.perf_counter() - start) * 1000, 2)
+    result["diet_filter_applied"] = diet_filter or "all"
+    return _json_response(result)
