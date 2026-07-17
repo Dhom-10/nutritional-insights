@@ -1,0 +1,169 @@
+# Phase 2 Deployment Guide — Nutritional Insights Cloud Dashboard
+
+This guide walks through taking Phase 1 (local Azure Function + Azurite)
+to Phase 2 (real Azure cloud + web dashboard), matching the "Cloud Setup
+Instructions" section of the assignment.
+
+Repo: `github.com/Dhom-10/nutritional-insights`
+
+## 0. Prerequisites
+
+- Azure account with an active subscription
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) installed (`az --version`)
+- [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) (`func --version`)
+- Python 3.9+ (matches Phase 1's Dockerfile base image)
+
+```bash
+az login
+```
+
+## 1. Create Resource Group + Storage Account
+
+```bash
+az group create --name diet-analysis-rg --location eastus
+
+az storage account create \
+  --name dietanalysisstorage \
+  --resource-group diet-analysis-rg \
+  --location eastus \
+  --sku Standard_LRS
+```
+
+Get the connection string (you'll need it for both the function app config
+and the local upload script):
+
+```bash
+az storage account show-connection-string \
+  --name dietanalysisstorage \
+  --resource-group diet-analysis-rg \
+  --output tsv
+```
+
+## 2. Upload the dataset to real Azure Blob Storage
+
+This replaces Phase 1's `upload_to_azurite.py`, which pointed at the local
+emulator (`UseDevelopmentStorage=true`).
+
+```bash
+cd azure-function
+export AZURE_STORAGE_CONNECTION_STRING="<paste connection string from step 1>"
+pip install azure-storage-blob
+python upload_dataset_to_cloud.py path/to/All_Diets.csv
+```
+
+This creates a `datasets` container and uploads `All_Diets.csv` into it.
+
+## 3. Create the Function App
+
+```bash
+# Storage account for the Function App's own runtime state (can reuse the one above,
+# or create a second dedicated one — either works for a course project)
+az functionapp create \
+  --resource-group diet-analysis-rg \
+  --consumption-plan-location eastus \
+  --runtime python \
+  --runtime-version 3.9 \
+  --functions-version 4 \
+  --name diet-analysis-func \
+  --storage-account dietanalysisstorage \
+  --os-type Linux
+```
+
+Function app names are globally unique — if `diet-analysis-func` is taken,
+pick another name and use it consistently below.
+
+## 4. Configure app settings (connection string + blob names)
+
+```bash
+az functionapp config appsettings set \
+  --name diet-analysis-func \
+  --resource-group diet-analysis-rg \
+  --settings \
+    AZURE_STORAGE_CONNECTION_STRING="<paste connection string from step 1>" \
+    BLOB_CONTAINER_NAME="datasets" \
+    BLOB_NAME="All_Diets.csv"
+```
+
+## 5. Test locally first (optional but recommended)
+
+```bash
+cd azure-function
+cp local.settings.json.example local.settings.json
+# edit local.settings.json and paste your real connection string
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+func start
+```
+
+Visit `http://localhost:7071/api/insights` and `http://localhost:7071/api/diet_types`
+in a browser to confirm both endpoints return JSON.
+
+## 6. Deploy the Function
+
+```bash
+cd azure-function
+func azure functionapp publish diet-analysis-func
+```
+
+Test the deployed endpoint:
+
+```bash
+curl "https://diet-analysis-func.azurewebsites.net/api/insights"
+curl "https://diet-analysis-func.azurewebsites.net/api/insights?diet_type=keto"
+curl "https://diet-analysis-func.azurewebsites.net/api/diet_types"
+```
+
+## 7. Point the dashboard at the live function
+
+Edit `dashboard/index.html` and update the `API_BASE_URL` constant near the
+top of the `<script>` block:
+
+```js
+const API_BASE_URL = "https://diet-analysis-func.azurewebsites.net/api";
+```
+
+## 8. Deploy the dashboard (Azure Static Web App)
+
+```bash
+az staticwebapp create \
+  --name diet-analysis-dashboard \
+  --resource-group diet-analysis-rg \
+  --location eastus2 \
+  --source https://github.com/Dhom-10/nutritional-insights \
+  --branch main \
+  --app-location "dashboard" \
+  --login-with-github
+```
+
+This walks through GitHub auth in the browser and sets up a CI/CD workflow
+(similar in spirit to Phase 1's `.github/workflows/deploy.yml`) that
+auto-deploys the `dashboard/` folder to Azure on every push to `main`.
+
+Alternatively, for a simpler one-off deploy without GitHub Actions:
+
+```bash
+npm install -g @azure/static-web-apps-cli
+swa deploy dashboard --deployment-token <token-from-azure-portal>
+```
+
+## 9. Verify end to end
+
+1. Open the Static Web App URL from the Azure Portal.
+2. Confirm all three charts render (bar, doughnut, scatter) plus the top-5
+   protein table.
+3. Change the diet type filter and click **Refresh** — confirm the charts
+   update and "Function execution time" changes.
+4. Note the deployed URLs for the Phase 2 deliverables list:
+   - Azure Function URL
+   - Static Web App URL
+   - GitHub repo link
+   - This documentation, exported as PDF
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| Dashboard shows "Failed to load data" | `API_BASE_URL` wrong, or CORS — the function already sends `Access-Control-Allow-Origin: *`, so check the URL/network tab first |
+| `ModuleNotFoundError: azure.storage.blob` on deploy | `requirements.txt` didn't get picked up — redeploy with `func azure functionapp publish diet-analysis-func --build remote` |
+| 500 error with "Internal error: ..." | Usually a missing/incorrect `AZURE_STORAGE_CONNECTION_STRING` app setting — re-run step 4 |
+| Empty charts, no error | Check `BLOB_CONTAINER_NAME` / `BLOB_NAME` app settings match what you uploaded in step 2 |

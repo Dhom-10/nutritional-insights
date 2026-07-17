@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nutritional Insights Dashboard — Phase 2</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1420;
+    --card: #1a2233;
+    --accent: #4fd1c5;
+    --accent2: #f6ad55;
+    --text: #e6ebf5;
+    --muted: #8892a6;
+    --border: #2a3448;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+  }
+  header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+  h1 { font-size: 22px; margin: 0; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  select, button {
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: #0f1420; font-weight: 600; border: none; }
+  button.primary:hover { opacity: 0.9; }
+  button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .meta-bar {
+    display: flex; gap: 24px; flex-wrap: wrap;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 18px; margin-bottom: 24px; font-size: 13px; color: var(--muted);
+  }
+  .meta-bar b { color: var(--text); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; height: 420px; display: flex; flex-direction: column;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 12px 0; color: var(--text); flex-shrink: 0; }
+  .card canvas { flex: 1; min-height: 0; max-height: 100%; }
+
+  .status { font-size: 13px; padding: 8px 12px; border-radius: 8px; margin-bottom: 16px; display: none; }
+  .status.error { display: block; background: #3a1d1d; color: #ff8a8a; border: 1px solid #5a2a2a; }
+  .status.loading { display: block; background: #1d2f3a; color: #7ec8ff; border: 1px solid #2a4a5a; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Nutritional Insights Dashboard</h1>
+    <div class="subtitle">Phase 2 — Cloud Dashboard Development (Azure Function → Blob Storage → Dashboard)</div>
+  </div>
+  <div class="controls">
+    <select id="dietFilter">
+      <option value="">All diet types</option>
+    </select>
+    <button class="primary" id="refreshBtn">Refresh</button>
+  </div>
+</header>
+
+<div id="status" class="status"></div>
+
+<div class="meta-bar">
+  <div>Function execution time: <b id="execTime">—</b></div>
+  <div>Rows analyzed: <b id="rowCount">—</b></div>
+  <div>Filter applied: <b id="filterApplied">—</b></div>
+  <div>Highest-protein diet: <b id="highestProtein">—</b></div>
+  <div>Last refreshed: <b id="lastRefreshed">—</b></div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Average Macronutrients by Diet Type (bar)</h2>
+    <canvas id="barChart"></canvas>
+  </div>
+  <div class="card">
+    <h2>Most Common Cuisine per Diet Type (doughnut)</h2>
+    <canvas id="pieChart"></canvas>
+  </div>
+  <div class="card">
+    <h2>Top Protein-Rich Recipes (scatter)</h2>
+    <canvas id="scatterChart"></canvas>
+  </div>
+  <div class="card">
+    <h2>Top 5 Protein Recipes (table)</h2>
+    <div style="overflow:auto;">
+      <table id="recipeTable">
+        <thead><tr><th>Diet</th><th>Recipe</th><th>Cuisine</th><th>Protein (g)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---- CONFIGURATION ----
+  // Replace with your deployed Azure Function base URL, e.g.
+  // "https://diet-analysis-func.azurewebsites.net/api"
+  const API_BASE_URL = "https://diet-analysis-func-dhom26.azurewebsites.net/api";
+
+  const statusEl = document.getElementById("status");
+  const dietFilterEl = document.getElementById("dietFilter");
+  const refreshBtn = document.getElementById("refreshBtn");
+
+  let barChart, pieChart, scatterChart;
+  const CHART_COLORS = ["#4fd1c5", "#f6ad55", "#fc8181", "#63b3ed", "#b794f4", "#68d391", "#f6e05e"];
+
+  function setStatus(message, type) {
+    statusEl.className = "status" + (type ? " " + type : "");
+    statusEl.textContent = message || "";
+  }
+
+  async function loadDietTypes() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/diet_types`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      dietFilterEl.innerHTML = '<option value="">All diet types</option>' +
+        data.diet_types.map(d => `<option value="${d}">${d}</option>`).join("");
+    } catch (err) {
+      console.warn("Could not load diet type list:", err);
+    }
+  }
+
+  async function loadInsights() {
+    refreshBtn.disabled = true;
+    setStatus("Loading data from Azure Function…", "loading");
+
+    const diet = dietFilterEl.value;
+    const url = diet
+      ? `${API_BASE_URL}/insights?diet_type=${encodeURIComponent(diet)}`
+      : `${API_BASE_URL}/insights`;
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+      renderAll(data);
+      setStatus("", "");
+    } catch (err) {
+      setStatus(`Failed to load data: ${err.message}. Is the Azure Function running / API_BASE_URL correct?`, "error");
+    } finally {
+      refreshBtn.disabled = false;
+    }
+  }
+
+  function renderAll(data) {
+    document.getElementById("execTime").textContent = `${data.execution_time_ms} ms`;
+    document.getElementById("rowCount").textContent = data.row_count;
+    document.getElementById("filterApplied").textContent = data.diet_filter_applied;
+    document.getElementById("highestProtein").textContent = data.highest_protein_diet;
+    document.getElementById("lastRefreshed").textContent = new Date().toLocaleTimeString();
+
+    renderBarChart(data.avg_macros);
+    renderPieChart(data.common_cuisine_per_diet);
+    renderScatterChart(data.top_protein_recipes);
+    renderTable(data.top_protein_recipes);
+  }
+
+  function renderBarChart(avgMacros) {
+    const labels = avgMacros.map(r => r.Diet_type);
+    const ctx = document.getElementById("barChart");
+    if (barChart) barChart.destroy();
+    barChart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "Protein (g)", data: avgMacros.map(r => r["Protein(g)"]), backgroundColor: CHART_COLORS[0] },
+          { label: "Carbs (g)", data: avgMacros.map(r => r["Carbs(g)"]), backgroundColor: CHART_COLORS[1] },
+          { label: "Fat (g)", data: avgMacros.map(r => r["Fat(g)"]), backgroundColor: CHART_COLORS[2] },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { x: { ticks: { color: "#8892a6" } }, y: { ticks: { color: "#8892a6" } } },
+        plugins: { legend: { labels: { color: "#e6ebf5" } } },
+      },
+    });
+  }
+
+  function renderPieChart(commonCuisine) {
+    const labels = commonCuisine.map(r => `${r.Diet_type} (${r.Cuisine_type})`);
+    const ctx = document.getElementById("pieChart");
+    if (pieChart) pieChart.destroy();
+    pieChart = new Chart(ctx, {
+      type: "doughnut",
+      data: {
+        labels,
+        datasets: [{ data: commonCuisine.map(() => 1), backgroundColor: CHART_COLORS }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom", labels: { color: "#e6ebf5", boxWidth: 12, font: { size: 10 } } } },
+      },
+    });
+  }
+
+  function renderScatterChart(topProtein) {
+    const dietTypes = [...new Set(topProtein.map(r => r.Diet_type))];
+    const datasets = dietTypes.map((diet, i) => ({
+      label: diet,
+      data: topProtein
+        .filter(r => r.Diet_type === diet)
+        .map(r => ({ x: r.Cuisine_type, y: r["Protein(g)"] })),
+      backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+    }));
+
+    const ctx = document.getElementById("scatterChart");
+    if (scatterChart) scatterChart.destroy();
+    scatterChart = new Chart(ctx, {
+      type: "scatter",
+      data: { datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { type: "category", labels: [...new Set(topProtein.map(r => r.Cuisine_type))], ticks: { color: "#8892a6" } },
+          y: { title: { display: true, text: "Protein (g)", color: "#8892a6" }, ticks: { color: "#8892a6" } },
+        },
+        plugins: { legend: { labels: { color: "#e6ebf5", boxWidth: 12, font: { size: 10 } } } },
+      },
+    });
+  }
+
+  function renderTable(topProtein) {
+    const tbody = document.querySelector("#recipeTable tbody");
+    tbody.innerHTML = topProtein
+      .slice(0, 15)
+      .map(r => `<tr><td>${r.Diet_type}</td><td>${r.Recipe_name}</td><td>${r.Cuisine_type}</td><td>${r["Protein(g)"]}</td></tr>`)
+      .join("");
+  }
+
+  refreshBtn.addEventListener("click", loadInsights);
+  dietFilterEl.addEventListener("change", loadInsights);
+
+  loadDietTypes().then(loadInsights);
+</script>
+
+</body>
+</html>
