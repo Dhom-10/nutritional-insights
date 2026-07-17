@@ -2,4 +2,3 @@ azurite_data/
 output/
 __pycache__/
 *.log
-.DS_Store
