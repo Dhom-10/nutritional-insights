@@ -114,6 +114,7 @@ func azure functionapp publish diet-analysis-func
 Test the deployed endpoints:
 
 ```bash
+curl "https://diet-analysis-func.azurewebsites.net/api/health"
 curl "https://diet-analysis-func.azurewebsites.net/api/insights"
 curl "https://diet-analysis-func.azurewebsites.net/api/insights?diet_type=keto"
 curl "https://diet-analysis-func.azurewebsites.net/api/diet_types"
@@ -121,6 +122,16 @@ curl "https://diet-analysis-func.azurewebsites.net/api/correlations"
 curl "https://diet-analysis-func.azurewebsites.net/api/recipes?page=1&page_size=10"
 curl "https://diet-analysis-func.azurewebsites.net/api/clusters?k=4"
 ```
+
+> **Event-driven function:** `on_dataset_uploaded` is a Blob Trigger, not an
+> HTTP route, so it has no URL to curl. It deploys automatically with the
+> rest of `function_app.py` in this same `func azure functionapp publish`
+> step. To see it fire, upload a CSV to the `datasets` container (e.g.
+> re-run `upload_dataset_to_cloud.py`, or drag a file into the container in
+> the Portal) and check the Function App's **Monitor** tab a few seconds
+> later — you'll see an invocation of `on_dataset_uploaded` with no HTTP
+> request behind it, which is the point: it's a reaction to an event, not a
+> reply to a caller.
 
 ## 7. Point the dashboard at the live function
 
@@ -155,20 +166,63 @@ npm install -g @azure/static-web-apps-cli
 swa deploy dashboard --deployment-token <token-from-azure-portal>
 ```
 
-## 9. Verify end to end
+## 9. Observability — link Application Insights
+
+The Function App logs structured lines (`diet_filter`, `row_count`,
+`elapsed_ms`, etc.) on every request, and `host.json` already has
+`applicationInsights` sampling configured — but that only becomes useful
+once an actual Application Insights resource is linked.
+
+```bash
+az monitor app-insights component create \
+  --app diet-analysis-insights \
+  --location eastus \
+  --resource-group diet-analysis-rg \
+  --application-type web
+
+# Grab its connection string and wire it to the Function App:
+INSTRUMENTATION_CONNECTION_STRING=$(az monitor app-insights component show \
+  --app diet-analysis-insights \
+  --resource-group diet-analysis-rg \
+  --query connectionString -o tsv)
+
+az functionapp config appsettings set \
+  --name diet-analysis-func \
+  --resource-group diet-analysis-rg \
+  --settings APPLICATIONINSIGHTS_CONNECTION_STRING="$INSTRUMENTATION_CONNECTION_STRING"
+```
+
+Then in the Portal, open the `diet-analysis-insights` resource and check:
+
+- **Live Metrics** — request rate/latency in real time while you click
+  around the dashboard.
+- **Transaction search / Traces** — the structured log fields
+  (`diet_filter`, `elapsed_ms`, `k`, ...) show up as custom dimensions on
+  each request, so you can filter e.g. "all `/api/clusters` calls where
+  `elapsed_ms > 500`" instead of grepping text logs.
+- **Failures** — any exception from the `except Exception` blocks (or the
+  Blob Trigger's validation failures) appears here automatically.
+
+This is the same three-pillar model from the observability lesson: Traces
+show *where* time is spent per request, Logs (the structured fields) show
+*why*, and Live Metrics is the real-time numerical view.
+
+## 10. Verify end to end
 
 1. Open the Static Web App URL from the Azure Portal.
 2. Confirm the bar, doughnut, and scatter charts render, plus the top-5
    protein table and the nutrient correlation Heatmap (5 visualizations
    total, auto-loaded).
-3. Change the diet type filter and click **Refresh** / **Get Nutritional
-   Insights** — confirm the charts and heatmap update and "Function
-   execution time" changes.
-4. Click **Get Recipes** — confirm a paginated recipe table appears and
-   Previous/Next page through the full dataset.
-5. Click **Get Clusters** — confirm a K-Means scatter plot and cluster
-   summary table appear; try changing "k" and clicking Recompute.
-6. Note the deployed URLs for the Phase 2 deliverables list:
+3. Change the diet type filter and click **Refresh** — confirm the charts
+   and heatmap update and "Execution time" changes.
+4. Page through **Recipes** with Previous/Next, and try the search box.
+5. Drag the **Clusters (k)** slider — confirm the scatter plot and cluster
+   cards recompute live; click a cluster card to isolate it.
+6. Hit `/api/health` directly — confirm `{"status": "ok", ...}` with no
+   Blob Storage dependency.
+7. Upload a CSV to the `datasets` container and confirm `on_dataset_uploaded`
+   shows an invocation in the Function App's Monitor tab (event-driven path).
+8. Note the deployed URLs for the Phase 2 deliverables list:
    - Azure Function URL
    - Static Web App URL
    - GitHub repo link

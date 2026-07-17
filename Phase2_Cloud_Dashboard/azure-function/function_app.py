@@ -1,12 +1,29 @@
 """
 Phase 2 - Cloud Dashboard Development
-Azure Function (Python v2 programming model, HTTP trigger)
+Azure Function (Python v2 programming model)
 
 This function is the cloud evolution of Phase 1's lambda_function.py.
 Instead of reading the diets dataset from Azurite (local emulator), it
 reads it from a real Azure Blob Storage container, cleans it, computes
 the same nutritional insights, and returns them as JSON so the web
 dashboard can render charts from them.
+
+Two trigger styles are used on purpose, to contrast request/response vs
+event-driven communication:
+  - HTTP triggers (get_nutritional_insights, get_diet_types, get_correlations,
+    get_recipes, get_clusters, health_check): synchronous - a client sends a
+    request and waits for a response. This is the "message" side of the
+    messages-vs-events distinction: a direct command to one handler.
+  - Blob trigger (on_dataset_uploaded): event-driven - no client calls it
+    directly. Azure Storage broadcasts a "blob created/updated" event and
+    this function reacts automatically, with no one waiting on a response.
+    This is the "event" side: a fact ("a file changed") that any interested
+    subscriber can react to.
+
+Observability: every request logs structured fields (via logging's `extra`)
+so that once Application Insights is linked to this Function App, these
+show up as custom dimensions on traces - letting you filter/query requests
+by diet_filter, row_count, k, etc. instead of just reading raw text logs.
 
 Environment variables expected (set in Azure Function App > Configuration,
 or in local.settings.json for local testing):
@@ -218,12 +235,38 @@ def get_nutritional_insights(req: func.HttpRequest) -> func.HttpResponse:
     result["execution_time_ms"] = elapsed_ms
     result["diet_filter_applied"] = diet_filter or "all"
 
+    # Structured log line: with Application Insights linked, diet_filter/row_count/
+    # elapsed_ms become queryable custom dimensions on this request's trace,
+    # instead of being buried in free-text.
+    logging.info(
+        "insights served",
+        extra={
+            "diet_filter": diet_filter or "all",
+            "row_count": result["row_count"],
+            "elapsed_ms": elapsed_ms,
+        },
+    )
+
     return func.HttpResponse(
         json.dumps(result, indent=2),
         status_code=200,
         mimetype="application/json",
         headers={"Access-Control-Allow-Origin": "*"},
     )
+
+
+@app.route(route="health", methods=["GET"])
+def health_check(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    GET /api/health
+
+    Lightweight liveness/readiness check that does NOT touch Blob Storage -
+    used to verify the Function App itself is up, independent of whether the
+    dataset is reachable. Standard operational-excellence practice: a
+    dashboard, uptime monitor, or load balancer can poll this cheaply instead
+    of hitting a heavy data endpoint just to check "is it alive".
+    """
+    return _json_response({"status": "ok", "service": "diet-analysis-func"})
 
 
 @app.route(route="diet_types", methods=["GET"])
@@ -281,6 +324,15 @@ def get_correlations(req: func.HttpRequest) -> func.HttpResponse:
 
     result["execution_time_ms"] = round((time.perf_counter() - start) * 1000, 2)
     result["diet_filter_applied"] = diet_filter or "all"
+
+    logging.info(
+        "correlations served",
+        extra={
+            "diet_filter": diet_filter or "all",
+            "row_count": result["row_count"],
+            "elapsed_ms": result["execution_time_ms"],
+        },
+    )
     return _json_response(result)
 
 
@@ -312,6 +364,16 @@ def get_recipes(req: func.HttpRequest) -> func.HttpResponse:
 
     result["execution_time_ms"] = round((time.perf_counter() - start) * 1000, 2)
     result["diet_filter_applied"] = diet_filter or "all"
+
+    logging.info(
+        "recipes served",
+        extra={
+            "diet_filter": diet_filter or "all",
+            "page": result["page"],
+            "total_rows": result["total_rows"],
+            "elapsed_ms": result["execution_time_ms"],
+        },
+    )
     return _json_response(result)
 
 
@@ -343,4 +405,61 @@ def get_clusters(req: func.HttpRequest) -> func.HttpResponse:
 
     result["execution_time_ms"] = round((time.perf_counter() - start) * 1000, 2)
     result["diet_filter_applied"] = diet_filter or "all"
+
+    logging.info(
+        "clusters served",
+        extra={
+            "diet_filter": diet_filter or "all",
+            "k": result["k"],
+            "row_count": result["row_count"],
+            "elapsed_ms": result["execution_time_ms"],
+        },
+    )
     return _json_response(result)
+
+
+# ============================================================================
+# EVENT-DRIVEN: Blob Trigger (contrast with the HTTP/request-response routes above)
+# ============================================================================
+#
+# Every function above is a "message" handler: a client sends an HTTP request
+# and is blocked waiting for a direct response. This function is different -
+# it is an "event" subscriber: nobody calls it directly. Azure Blob Storage
+# broadcasts a fact ("this blob was created or updated") whenever a file
+# lands in the "datasets" container, and the Functions runtime wakes this
+# handler up automatically to react. There is no caller waiting on a
+# response, and multiple independent subscribers could react to the same
+# blob event without knowing about each other (fan-out) - the defining traits
+# of event-driven communication versus point-to-point request/response.
+#
+# Practical use here: whenever someone uploads a refreshed All_Diets.csv
+# (e.g. via upload_dataset_to_cloud.py), this validates the new file's shape
+# automatically - no one has to remember to call a "validate" endpoint.
+@app.blob_trigger(arg_name="myblob", path="datasets/{name}", connection="AZURE_STORAGE_CONNECTION_STRING")
+def on_dataset_uploaded(myblob: func.InputStream) -> None:
+    size_kb = round(myblob.length / 1024, 1) if myblob.length else 0
+    logging.info(
+        "dataset blob event received",
+        extra={"blob_name": myblob.name, "size_kb": size_kb},
+    )
+
+    if not myblob.name.lower().endswith(".csv"):
+        logging.info(f"[event] Skipping non-CSV blob: {myblob.name}")
+        return
+
+    try:
+        df = pd.read_csv(myblob, usecols=NEEDED_COLUMNS)
+        missing_values = int(df[NUMERIC_COLUMNS].isna().sum().sum())
+        logging.info(
+            "dataset validated",
+            extra={
+                "blob_name": myblob.name,
+                "row_count": len(df),
+                "missing_values": missing_values,
+            },
+        )
+    except Exception as e:
+        # Validation failures are logged (and would show up as a failed
+        # trace / exception in Application Insights) rather than raised,
+        # since there's no HTTP caller here to return an error response to.
+        logging.error(f"[event] Dataset validation failed for {myblob.name}: {e}")

@@ -25,6 +25,8 @@ Phase2_Cloud_Dashboard/
 
 ## Endpoints
 
+HTTP-triggered (request/response — a client calls these and waits for a reply):
+
 - `GET /api/insights` — average macros, top-5 protein recipes per diet,
   highest-protein diet, most common cuisine per diet, execution time (ms)
 - `GET /api/insights?diet_type=keto` — same, filtered to one diet type
@@ -36,6 +38,27 @@ Phase2_Cloud_Dashboard/
   individual recipe rows, powers the "Get Recipes" button + pagination UI
 - `GET /api/clusters` (`?diet_type=keto&k=4`) — K-Means clustering of
   recipes by macronutrient profile, powers the "Get Clusters" button
+- `GET /api/health` — lightweight liveness check (no Blob Storage access),
+  for uptime monitors / load balancers to poll cheaply
+
+Event-driven (no one calls this directly — Azure Storage triggers it):
+
+- `on_dataset_uploaded` (Blob Trigger, `datasets/{name}`) — fires
+  automatically whenever a file is added or updated in the `datasets`
+  container. Validates the CSV (row count, missing values) and logs the
+  result. This is the "event" side of messages vs events: Blob Storage
+  broadcasts a fact ("a blob changed") and this function reacts, with no
+  request/response involved.
+
+## Observability
+
+Every HTTP endpoint logs a structured line (via Python logging's `extra=`)
+with fields like `diet_filter`, `row_count`, `elapsed_ms`. Once
+[Application Insights is linked](docs/DEPLOYMENT_GUIDE.md#9-observability---link-application-insights)
+to the Function App, these become queryable custom dimensions on each
+request's trace — e.g. "show me all `/api/clusters` calls where
+`elapsed_ms > 500`" — instead of grepping raw text logs. `host.json` already
+has `applicationInsights` sampling configured.
 
 ## Quick start
 
