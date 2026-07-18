@@ -1,26 +1,26 @@
 # Phase 2 — Cloud Dashboard Development
 
 Builds on Phase 1 (`github.com/Dhom-10/nutritional-insights`): moves the
-diet-analysis Azure Function from local Azurite to real Azure Blob
-Storage, and adds a browser dashboard that visualizes the results.
+diet-analysis Azure Function from local Azurite to Azure Blob
+Storage.
 
 ## Structure
 
 ```
 Phase2_Cloud_Dashboard/
-├── azure-function/
-│   ├── function_app.py
-│   ├── requirements.txt
-│   ├── host.json
-│   ├── local.settings.json.example
-│   ├── upload_dataset_to_cloud.py
-│   └── .gitignore
-├── dashboard/
-│   ├── index.html
-│   └── staticwebapp.config.json
-└── docs/
-    ├── DEPLOYMENT_GUIDE.md
-    └── Phase2_Documentation.pdf
+azure-function/
+function_app.py
+requirements.txt
+host.json
+local.settings.json.example
+upload_dataset_to_cloud.py
+.gitignore
+dashboard/
+index.htm
+staticwebapp.config.json
+docs/
+DEPLOYMENT_GUIDE.md
+Phase2_Documentation.pdf
 ```
 
 ## Endpoints
